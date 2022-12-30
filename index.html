@@ -1,13 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MIDI Router</title>
     <script src="./build/main.js"></script>
+    <style>
+        @font-face {
+            font-family: "m8stealth57";
+            src: url("data:font/woff2;base64,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") format("woff2")
+        }
+
+        body {
+            font-family: "m8stealth57";
+            font-size: 12px;
+            background-color: black;
+            color: gray
+        }
+
+        #router {
+            margin-bottom: 30px;
+        }
+
+        #console {
+            line-height: 18px;
+        }
+
+        .heading {
+            padding-bottom: 10px;
+            color: rgb(50, 236, 255);
+        }
+
+    </style>
 </head>
+
 <body>
+    <div class="heading" >ROUTES</div>
+    <div id="router"></div>
+    <div class="heading">MONITOR</div>
     <div id="console"></div>
 </body>
+
 </html>
