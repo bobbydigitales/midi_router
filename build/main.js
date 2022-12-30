@@ -1,7 +1,7 @@
 "use strict";
 const hasMIDISupport = 'requestMIDIAccess' in navigator;
 let consoleDiv = null;
-let consoleText = new Array(20);
+let consoleText = [];
 // let m8:any = null;
 function log(message) {
     consoleText.push(`${performance.now().toFixed(2).padEnd(20, " ")}: ${message}`);
@@ -15,11 +15,14 @@ function log(message) {
 }
 window.addEventListener('load', main);
 class MIDIRouter {
-    _inputs = null;
-    _outputs = null;
+    _inputs = [];
+    _outputs = [];
     midi = null;
     log = null;
     m8 = null;
+    renderCallback = null;
+    routes = new Map();
+    nameToOutput = new Map();
     get inputs() {
         return this._inputs;
     }
@@ -35,35 +38,39 @@ class MIDIRouter {
         [0xD, "Channel Aftertouch"],
         [0xE, "Pitch wheel"],
     ]);
-    constructor() {
-    }
-    async init(logger) {
+    async init(logger, renderCallback) {
         this.midi = await navigator.requestMIDIAccess();
         if (!this.midi) {
             return "Couldn't get MIDI access :(";
         }
-        this.midi.addEventListener('statechange', this.onStateChanged.bind(this));
         this.log = logger;
+        this.renderCallback = renderCallback;
+        this.midi.addEventListener('statechange', this.onStateChanged.bind(this));
+        this.updateConnections();
+    }
+    updateConnections() {
         this._inputs = [...this.midi.inputs.values()];
         this._outputs = [...this.midi.outputs.values()];
-        let onMIDIMessage = this.onMIDIMessage.bind(this);
         for (let input of this._inputs) {
-            input.addEventListener('midimessage', onMIDIMessage);
+            input.onmidimessage = (message) => this.onMIDIMessage(message);
         }
-        // let mpk2 =  this._inputs.filter((input:any)=>input.name.includes('MPKmini2'))[0];
-        // this.m8 = this._outputs.filter((input:any)=>input.name.includes('M8'))[0];
-        // let m8in = [...this.inputs].filter((input:any)=>input.name.includes('M8'))[0];
-        // log(`${mpk2.name}, ${m8.name}`);
-        // arturia.addEventListener('midimessage', onMIDIMessage);
-        // mpk2.addEventListener('midimessage', this.onMIDIMessage.bind(this));
-        // m8in.addEventListener('midimessage', this.onMIDIMessage.bind(this));
+        for (let output of this._outputs) {
+            this.nameToOutput.set(output.name, output);
+        }
+        this.renderCallback(this);
     }
     onStateChanged(message) {
         let port = message.port;
         this.log(`MIDI device ${port.state}: ${port.manufacturer} ${port.name} ${port.type}`);
+        this.updateConnections();
     }
     onMIDIMessage(message) {
+        let inputName = message.target.name;
         // this.m8.send(message.data);
+        let output = this.routes.get(inputName);
+        if (output) {
+            output.send(message.data);
+        }
         let data = message.data;
         let statusByte = data[0] >> 4;
         let messageType = this.messageMap.get(statusByte);
@@ -71,6 +78,14 @@ class MIDIRouter {
         let noteNumber = data[1];
         let velocity = data[2];
         this.log(`${message.target.name}: ${messageType} ${channel} ${noteNumber} ${velocity}`);
+    }
+    updateRoutes(route) {
+        let [inputName, outputName] = route.split(',');
+        log(`ROUTING ${inputName} to ${outputName}`);
+        this.routes.set(inputName, this.nameToOutput.get(outputName));
+    }
+    getRoute(inputName) {
+        return this.routes.get(inputName);
     }
 }
 async function main() {
@@ -81,37 +96,47 @@ async function main() {
     }
     log('MIDI is supported!');
     const router = new MIDIRouter();
-    await router.init(log);
-    log(`Inputs: ${router.inputs.map((input) => input.name)}`);
-    log(`Outputs: ${router.outputs.map((output) => output.name)}`);
-    render(router);
+    await router.init(log, render);
+    // render(router);
     // log(`inputs: ${router.inputs.map((input:any)=>input.name)}`);
     // log(`outputs: ${router.outputs.map((output:any)=>output.name)}`);
 }
+// TODO - replace this with preact or something.
 function render(router) {
+    if (router.inputs && router.outputs) {
+        log(`Inputs: ${router.inputs.map((input) => input.name)}`);
+        log(`Outputs: ${router.outputs.map((output) => output.name)}`);
+    }
     let routerElement = document.getElementById('router');
     if (!routerElement) {
         throw new Error(`couldn't create router control`);
     }
     // @ts-ignore
     routerElement.replaceChildren();
+    let disabled = document.createElement('option');
+    disabled.text = "Disbled";
+    disabled.value = "disabled";
     for (let input of router.inputs) {
         let container = document.createElement('div');
-        let enabled = document.createElement('input');
-        enabled.type = 'checkbox';
-        enabled.style.marginRight = '20px';
-        container.appendChild(enabled);
         let inputLabel = document.createElement('span');
         inputLabel.innerText = `${input.name}:`;
         container.appendChild(inputLabel);
         let dropDown = document.createElement('select');
+        dropDown.addEventListener('change', (message) => { router.updateRoutes(message.target.value); });
+        let disabledInput = disabled.cloneNode(true);
+        disabledInput.value = `${input.name},disabled`;
+        dropDown.add(disabledInput);
+        let routeName = router.getRoute(input.name)?.name;
         for (let output of router.outputs) {
             if (output.name === input.name) {
                 continue;
             }
             let option = document.createElement('option');
-            option.value = output.name;
+            option.value = `${input.name},${output.name}`;
             option.text = output.name;
+            if (output.name === routeName) {
+                option.selected = true;
+            }
             dropDown.add(option);
         }
         container.appendChild(dropDown);
