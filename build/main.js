@@ -23,6 +23,7 @@ class MIDIRouter {
     renderCallback = null;
     routes = new Map();
     nameToOutput = new Map();
+    savedRoutes = new Map();
     get inputs() {
         return this._inputs;
     }
@@ -53,6 +54,11 @@ class MIDIRouter {
         this._outputs = [...this.midi.outputs.values()];
         for (let input of this._inputs) {
             input.onmidimessage = (message) => this.onMIDIMessage(message);
+            let savedRoute = this.savedRoutes.get(input.name);
+            if (savedRoute) {
+                this.log(`Restoring saved route: ${input.name}->${savedRoute}`);
+                this.updateRoutes(`${input.name},${savedRoute}`);
+            }
         }
         for (let output of this._outputs) {
             this.nameToOutput.set(output.name, output);
@@ -83,6 +89,22 @@ class MIDIRouter {
         let [inputName, outputName] = route.split(',');
         log(`ROUTING ${inputName} to ${outputName}`);
         this.routes.set(inputName, this.nameToOutput.get(outputName));
+        let saveArray = [];
+        for (let [inputName, output] of this.routes) {
+            if (!output) {
+                continue;
+            }
+            saveArray.push([inputName, output.name]);
+        }
+        localStorage.setItem('MIDIRouter', JSON.stringify(saveArray));
+    }
+    restoreRoutesFromLocalStorage() {
+        let savedRoutes = localStorage.getItem('MIDIRouter');
+        if (!savedRoutes) {
+            return;
+        }
+        this.savedRoutes = new Map(JSON.parse(savedRoutes));
+        console.log(this.savedRoutes);
     }
     getRoute(inputName) {
         return this.routes.get(inputName);
@@ -97,6 +119,7 @@ async function main() {
     log('MIDI is supported!');
     const router = new MIDIRouter();
     await router.init(log, render);
+    router.restoreRoutesFromLocalStorage();
     // render(router);
     // log(`inputs: ${router.inputs.map((input:any)=>input.name)}`);
     // log(`outputs: ${router.outputs.map((output:any)=>output.name)}`);

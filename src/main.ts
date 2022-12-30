@@ -27,7 +27,7 @@ class MIDIRouter {
     renderCallback:any = null;
     private routes:Map<string, any> = new Map();
     private nameToOutput:Map<string, any> = new Map();
-
+    savedRoutes:Map<string, string> = new Map();
 
     get inputs() {
         return this._inputs;
@@ -65,6 +65,11 @@ class MIDIRouter {
 
         for (let input of this._inputs) {
             input.onmidimessage = (message:any)=>this.onMIDIMessage(message);
+            let savedRoute = this.savedRoutes.get(input.name);
+            if (savedRoute) {
+                this.log(`Restoring saved route: ${input.name}->${savedRoute}`);
+                this.updateRoutes(`${input.name},${savedRoute}`);
+            }
         }
 
         for (let output of this._outputs) {
@@ -109,6 +114,26 @@ class MIDIRouter {
 
         this.routes.set(inputName, this.nameToOutput.get(outputName));
 
+        let saveArray = [];
+
+        for (let [inputName, output] of this.routes) {
+            if (!output) {
+                continue;
+            }
+            saveArray.push([inputName, output.name]);
+        }
+        localStorage.setItem('MIDIRouter', JSON.stringify(saveArray));
+
+    }
+
+    restoreRoutesFromLocalStorage() {
+        let savedRoutes = localStorage.getItem('MIDIRouter');
+        if (!savedRoutes) {
+            return;
+        }
+
+        this.savedRoutes = new Map(JSON.parse(savedRoutes));
+        console.log(this.savedRoutes);
     }
 
     getRoute(inputName:string) {
@@ -129,6 +154,8 @@ async function main() {
     const router = new MIDIRouter();
 
     await router.init(log, render);
+
+    router.restoreRoutesFromLocalStorage();
 
     // render(router);
     // log(`inputs: ${router.inputs.map((input:any)=>input.name)}`);
