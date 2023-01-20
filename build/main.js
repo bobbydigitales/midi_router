@@ -137,7 +137,7 @@ function render(router) {
     // @ts-ignore
     routerElement.replaceChildren();
     let disabled = document.createElement('option');
-    disabled.text = "Disbled";
+    disabled.text = "Disabled";
     disabled.value = "disabled";
     for (let input of router.inputs) {
         let container = document.createElement('div');

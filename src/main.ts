@@ -178,7 +178,7 @@ function render(router:MIDIRouter) {
     routerElement.replaceChildren();
 
     let disabled = document.createElement('option');
-    disabled.text = "Disbled";
+    disabled.text = "Disabled";
     disabled.value = "disabled";
 
     for (let input of router.inputs) {
